@@ -11,7 +11,6 @@
 set -euo pipefail
 
 # === CONFIGURATION =========================================================
-# TODO: point this at the real GitHub repository once pushed.
 REPO_URL="https://github.com/MohandL3G/Achievements-Passport.git"
 APP_DIR="/opt/achievements-passport"
 SERVER_DIR="$APP_DIR/host/server"

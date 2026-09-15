@@ -117,7 +117,7 @@ export const GenerateWizard: React.FC<GenerateWizardProps> = ({ isOwner, onGener
               <input
                 type="file"
                 multiple
-                webkitdirectory
+                {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
                 onChange={handleFolder}
                 className="block w-full text-xs text-neutral-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-amber-500 file:text-neutral-950 file:font-semibold hover:file:bg-amber-400"
               />

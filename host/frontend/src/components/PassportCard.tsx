@@ -33,8 +33,9 @@ function renderPng(data: PassportData): void {
   canvas.height = 630;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
+  const g = ctx;
 
-  const bg = ctx.createLinearGradient(0, 0, 0, 630);
+  const bg = g.createLinearGradient(0, 0, 0, 630);
   bg.addColorStop(0, '#14100a');
   bg.addColorStop(1, '#0a0a0a');
   ctx.fillStyle = bg;
@@ -72,9 +73,9 @@ function renderPng(data: PassportData): void {
   }
 
   function finish() {
-    ctx.fillStyle = '#f5f0e6';
-    ctx.font = 'bold 56px serif';
-    ctx.fillText(data.Player.personaName, 600, 330);
+    g.fillStyle = '#f5f0e6';
+    g.font = 'bold 56px serif';
+    g.fillText(data.Player.personaName, 600, 330);
 
     const summary = data.Summary;
     const rows: [string, string][] = [
@@ -89,17 +90,17 @@ function renderPng(data: PassportData): void {
     const y = 430;
     rows.forEach(([label, value], i) => {
       const x = startX + i * cellW + cellW / 2;
-      ctx.fillStyle = '#8b8370';
-      ctx.font = '26px sans-serif';
-      ctx.fillText(label, x, y);
-      ctx.fillStyle = '#f0e9d8';
-      ctx.font = 'bold 44px sans-serif';
-      ctx.fillText(value, x, y + 60);
+      g.fillStyle = '#8b8370';
+      g.font = '26px sans-serif';
+      g.fillText(label, x, y);
+      g.fillStyle = '#f0e9d8';
+      g.font = 'bold 44px sans-serif';
+      g.fillText(value, x, y + 60);
     });
 
-    ctx.fillStyle = '#6b6456';
-    ctx.font = '28px sans-serif';
-    ctx.fillText(`Generated ${data.GeneratedAtFormatted}`, 600, 580);
+    g.fillStyle = '#6b6456';
+    g.font = '28px sans-serif';
+    g.fillText(`Generated ${data.GeneratedAtFormatted}`, 600, 580);
 
     const a = document.createElement('a');
     a.download = `passport-${data.Player.steamid64}.png`;
