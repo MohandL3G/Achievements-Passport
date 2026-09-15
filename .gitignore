@@ -1,0 +1,45 @@
+# .NET build output
+bin/
+obj/
+publish/
+out/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Node.js / Web host
+node_modules/
+dist/
+.env
+.env.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Host uploaded data / cache
+host/server/data/
+data/
+
+# Test results
+[Tt]est[Rr]esult*/
+*.trx
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# Logs
+*.log
+
+# Local runtime config / app data
+*.runtimeconfig.dev.json
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
