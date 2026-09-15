@@ -1,5 +1,5 @@
 const config = require('../config');
-const { readSettings } = require('./storage');
+const { readSettings } = require('../lib/storage');
 
 function requireLogin(req, res, next) {
   if (!req.session || !req.session.steamid) {
