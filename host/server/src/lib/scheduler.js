@@ -5,6 +5,7 @@ const config = require('../config');
 const {
   readSettings,
   readSecrets,
+  readUserSecrets,
   readUsersIndex,
   saveUserCard,
   clearCr,
@@ -36,19 +37,26 @@ async function runNightlyJob() {
     const users = readUsersIndex().filter((u) => u.autoUpdate && !u.disabled);
     const secrets = readSecrets();
     const canS3 = Boolean(secrets.s3 && secrets.s3.bucket);
-    const api = new SteamApi(config.STEAM_API_KEY);
 
     for (const u of users) {
       writeLog(`  -> regenerating ${u.steamid64} (${u.personaName || 'unknown'})`);
       try {
         let crGames = null;
-        if (u.steamid64 === config.OWNER_STEAMID && canS3) {
+        const userS3 = readUserSecrets(u.steamid64).s3;
+        if (userS3 && userS3.bucket) {
+          const result = await fetchCrFiles(userS3, accountIdOfSteamId64(u.steamid64));
+          clearCr(u.steamid64);
+          for (const f of result.files) writeCrJson(u.steamid64, f.appId, f.data);
+          crGames = result.files.map((f) => buildCrGame(f.appId, f.data));
+          writeLog(`    s3 pull (user): ${result.files.length} files (prefix ${result.usedPrefix || 'auto'})`);
+        } else if (u.steamid64 === config.OWNER_STEAMID && canS3) {
           const result = await fetchCrFiles(secrets.s3, accountIdOfSteamId64(u.steamid64));
           clearCr(u.steamid64);
           for (const f of result.files) writeCrJson(u.steamid64, f.appId, f.data);
           crGames = result.files.map((f) => buildCrGame(f.appId, f.data));
-          writeLog(`    s3 pull: ${result.files.length} files (prefix ${result.usedPrefix || 'auto'})`);
+          writeLog(`    s3 pull (admin): ${result.files.length} files (prefix ${result.usedPrefix || 'auto'})`);
         }
+        const api = u.autoIncludeSteam !== false ? new SteamApi(config.STEAM_API_KEY) : null;
         const card = await aggregate(api, u.steamid64, crGames);
         saveUserCard(u.steamid64, card);
         writeLog(`    ok: ${card.Summary.TotalGames} games, ${card.Summary.PerfectGames} perfect`);
