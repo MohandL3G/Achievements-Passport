@@ -30,7 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { key: 'games', label: 'All Games', icon: <Library className="w-4 h-4" /> },
     { key: 'generate', label: 'Generate', icon: <FileText className="w-4 h-4" /> },
   ];
-  if (me.isAdmin) {
+  if (me.isOwner || me.isAdmin) {
     tabDefs.push({ key: 'admin', label: 'Admin', icon: <ShieldCheck className="w-4 h-4" /> });
   }
 

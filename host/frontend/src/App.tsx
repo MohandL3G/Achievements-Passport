@@ -100,7 +100,7 @@ export const App: React.FC = () => {
     setSelectedGame(null);
   };
 
-  const loggedOut = booted && !me;
+  const loggedOut = booted && !me?.steamid;
 
   const renderCard = () => {
     if (loadingCard) {
