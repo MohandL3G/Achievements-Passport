@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Me, PassportData, GameRecord, PublicUser } from './types';
 import { getMe, fetchPassport, fetchPublicUsers, logout, adminLogout, startSteamLogin } from './api';
 import { Navbar, TabKind } from './components/Navbar';
-import { SignIn } from './components/SignIn';
 import { PassportCard } from './components/PassportCard';
 import { GamesList } from './components/GamesList';
 import { GameDetail } from './components/GameDetail';
@@ -14,7 +13,9 @@ export const App: React.FC = () => {
   const [me, setMe] = useState<Me | null>(null);
   const [booted, setBooted] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKind>('passport');
+  const [tab, setTab] = useState<TabKind>(() =>
+    /^\/u\/\d+/.test(window.location.pathname) ? 'passport' : 'generate'
+  );
   const [card, setCard] = useState<PassportData | null>(null);
   const [cardError, setCardError] = useState<string | null>(null);
   const [loadingCard, setLoadingCard] = useState(false);
@@ -34,11 +35,6 @@ export const App: React.FC = () => {
         const m = await refreshMe();
         const mAll = /^\/u\/(\d+)/.exec(window.location.pathname);
         setViewing(mAll ? mAll[1] : m && m.steamid ? m.steamid : null);
-        if (m) {
-          fetchPublicUsers()
-            .then(setUsersList)
-            .catch(() => {});
-        }
       } catch {
         setMe(null);
         setViewing(null);
@@ -46,6 +42,9 @@ export const App: React.FC = () => {
         setBooted(true);
       }
     })();
+    fetchPublicUsers()
+      .then(setUsersList)
+      .catch(() => {});
   }, [refreshMe]);
 
   useEffect(() => {
@@ -84,7 +83,7 @@ export const App: React.FC = () => {
   };
 
   const switchSelf = () => {
-    setViewing(me ? me.steamid : null);
+    setViewing(me?.steamid ?? null);
     window.history.replaceState(null, '', '/');
     setTab('passport');
     setSelectedGame(null);
@@ -189,24 +188,14 @@ export const App: React.FC = () => {
       )}
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8">
-        {loggedOut ? (
-          viewing ? (
-            tab === 'passport' ? (
-              renderCard()
-            ) : (
-              renderGames()
-            )
-          ) : (
-            <SignIn />
-          )
-        ) : selectedGame ? (
+        {selectedGame ? (
           renderGames()
         ) : tab === 'passport' ? (
           renderCard()
         ) : tab === 'games' ? (
           renderGames()
         ) : tab === 'generate' ? (
-          <GenerateWizard isOwner={!!me?.isOwner} onGenerated={onGenerated} />
+          <GenerateWizard me={me} onGenerated={onGenerated} />
         ) : (
           <AdminPanel
             meAdmin={!!me?.isAdmin}
