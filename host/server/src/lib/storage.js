@@ -76,6 +76,20 @@ function saveSecrets(secrets) {
   writeJson(SECRETS_FILE, encrypt(secrets, config.ENCRYPTION_SECRET));
 }
 
+// ---------- Per-user secrets (encrypted at rest) ----------
+
+function userSecretsFile(steamid) {
+  return path.join(userDir(steamid), 'secrets.enc.json');
+}
+
+function readUserSecrets(steamid) {
+  return decrypt(readJson(userSecretsFile(steamid), null), config.ENCRYPTION_SECRET) || {};
+}
+
+function saveUserSecrets(steamid, secrets) {
+  writeJson(userSecretsFile(steamid), encrypt(secrets, config.ENCRYPTION_SECRET));
+}
+
 // ---------- Users index ----------
 
 function readUsersIndex() {
@@ -99,9 +113,10 @@ function upsertUser(entry) {
     delete merged.createdAt;
     delete merged.autoUpdate;
     delete merged.disabled;
+    if (!('autoIncludeSteam' in existing)) existing.autoIncludeSteam = true;
     Object.assign(existing, merged);
   } else {
-    users.push({ ...entry });
+    users.push({ autoIncludeSteam: true, ...entry });
   }
   saveUsersIndex(users);
   return existing || entry;
@@ -122,7 +137,7 @@ function cardExists(steamid) {
   return fs.existsSync(path.join(userDir(steamid), 'card.json'));
 }
 
-function saveUserCard(steamid, card) {
+function saveUserCard(steamid, card, autoIncludeSteam) {
   ensureUserDirs(steamid);
   const cardFile = path.join(userDir(steamid), 'card.json');
   if (fs.existsSync(cardFile)) {
@@ -140,6 +155,8 @@ function saveUserCard(steamid, card) {
   if (u) {
     u.lastGeneratedAt = new Date().toISOString();
     u.gamesCount = card.Summary ? card.Summary.TotalGames : u.gamesCount;
+    if (autoIncludeSteam !== undefined) u.autoIncludeSteam = autoIncludeSteam;
+    else if (u.autoIncludeSteam === undefined) u.autoIncludeSteam = true;
     saveUsersIndex(users);
   }
   return card;
@@ -255,6 +272,8 @@ module.exports = {
   saveSettings,
   readSecrets,
   saveSecrets,
+  readUserSecrets,
+  saveUserSecrets,
   readUsersIndex,
   saveUsersIndex,
   findUser,

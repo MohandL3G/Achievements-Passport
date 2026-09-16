@@ -70,7 +70,31 @@ export interface Me {
   csrf: string | null;
 }
 
-export type GenerateMode = 'steam' | 'folder' | 'zip' | 's3';
+export interface UserS3Config {
+  endpoint: string;
+  bucket: string;
+  region: string;
+  prefix: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  forcePathStyle: boolean;
+}
+
+export interface UserS3Status {
+  configured: boolean;
+  endpoint?: string;
+  bucket?: string;
+  region?: string;
+  prefix?: string;
+  forcePathStyle?: boolean;
+}
+
+export type CrSource = 'none' | 'folder' | 'zip' | 's3';
+
+export interface GenerateOptions {
+  includeSteam: boolean;
+  crSource: CrSource;
+}
 
 export interface GenerateResult {
   ok: boolean;

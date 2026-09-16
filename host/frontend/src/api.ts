@@ -1,4 +1,4 @@
-import { AdminState, GenerateMode, GenerateResult, Me, PassportData, PublicUser } from './types';
+import { AdminState, CrSource, GenerateResult, Me, PassportData, PublicUser, UserS3Config, UserS3Status } from './types';
 
 let csrfToken: string | null = null;
 
@@ -65,6 +65,31 @@ export async function adminLogout(): Promise<void> {
   setCsrf(null);
 }
 
+export async function myS3Status(): Promise<UserS3Status> {
+  const res = await fetch('/api/generate/s3', { credentials: 'same-origin' });
+  return parse<UserS3Status>(res);
+}
+
+export async function saveMyS3(cfg: UserS3Config): Promise<{ ok: boolean }> {
+  const res = await fetch('/api/generate/s3', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(cfg),
+    credentials: 'same-origin',
+  });
+  return parse<{ ok: boolean }>(res);
+}
+
+export async function testMyS3(cfg: UserS3Config): Promise<{ ok: boolean }> {
+  const res = await fetch('/api/generate/s3/test', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(cfg),
+    credentials: 'same-origin',
+  });
+  return parse<{ ok: boolean }>(res);
+}
+
 export async function fetchPassport(steamid: string): Promise<PassportData> {
   const res = await fetch(`/api/u/${steamid}/card`, { credentials: 'same-origin' });
   return parse<PassportData>(res);
@@ -76,9 +101,12 @@ export async function fetchPublicUsers(): Promise<PublicUser[]> {
   return data.users;
 }
 
-export async function generate(mode: GenerateMode, opts: { zip?: File; files?: File[] } = {}): Promise<GenerateResult> {
+export async function generate(
+  opts: { includeSteam: boolean; crSource: CrSource; zip?: File; files?: File[] }
+): Promise<GenerateResult> {
   const fd = new FormData();
-  fd.set('mode', mode);
+  fd.set('includeSteam', String(opts.includeSteam));
+  fd.set('crSource', opts.crSource);
   if (opts.zip) fd.append('crZip', opts.zip);
   if (opts.files) {
     for (const f of opts.files) fd.append('crFiles', f, f.webkitRelativePath || f.name);

@@ -1,5 +1,12 @@
 const { mapLimit, nowIso } = require('../utils');
-const { readCrSnapshot } = require('./storage');
+const { readCrSnapshot, cacheRead } = require('./storage');
+
+const APPLIST_CACHE_TTL = 7 * 24 * 3600 * 1000;
+
+function loadCachedAppList() {
+  const cached = cacheRead('applist', APPLIST_CACHE_TTL);
+  return cached && Array.isArray(cached) ? new Map(cached) : new Map();
+}
 
 function buildSummary(games) {
   const withAch = games.filter((g) => g.AchievementsTotal > 0);
@@ -95,7 +102,16 @@ function mergeAndFinalize(steamGames, crGames, appList) {
 }
 
 async function aggregate(api, steamid, crGamesOverride) {
-  const { profile, owned, games: steamGames } = await aggregateSteam(api, steamid);
+  let profile = null;
+  let owned = { privateProfile: false };
+  let steamGames = [];
+
+  if (api) {
+    const steam = await aggregateSteam(api, steamid);
+    profile = steam.profile;
+    owned = steam.owned;
+    steamGames = steam.games;
+  }
 
   let crGames = crGamesOverride;
   if (!crGames) {
@@ -105,7 +121,8 @@ async function aggregate(api, steamid, crGamesOverride) {
     });
   }
 
-  const games = mergeAndFinalize(steamGames, crGames, api.appList || new Map());
+  const appList = api && api.appList ? api.appList : loadCachedAppList();
+  const games = mergeAndFinalize(steamGames, crGames, appList);
   const summary = buildSummary(games);
   const highlights = buildHighlights(games);
 
