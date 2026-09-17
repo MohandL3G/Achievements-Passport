@@ -71,7 +71,12 @@ router.get('/logout', (req, res) => {
 
 router.post('/admin/login', (req, res) => {
   const { username, password } = req.body || {};
-  if (username && safeEqual(username, config.ADMIN_USERNAME) && safeEqual(password, config.ADMIN_PASSWORD)) {
+  if (
+    config.ADMIN_PASSWORD &&
+    username &&
+    safeEqual(username, config.ADMIN_USERNAME) &&
+    safeEqual(password, config.ADMIN_PASSWORD)
+  ) {
     ensureCsrf(req);
     req.session.isAdmin = true;
     return res.json({ ok: true });
