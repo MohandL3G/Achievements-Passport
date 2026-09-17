@@ -4,7 +4,6 @@ const express = require('express');
 const multer = require('multer');
 const AdmZip = require('adm-zip');
 const config = require('../config');
-const { parseAppId } = require('../utils');
 const { requireLogin, requireGenerateAllowed, requireCsrf } = require('./guards');
 const {
   readSettings,
@@ -12,12 +11,13 @@ const {
   saveUserCard,
   clearCr,
   writeCrJson,
+  readCrSnapshot,
   readUserSecrets,
   saveUserSecrets,
 } = require('../lib/storage');
 const { SteamApi } = require('../lib/steamApi');
 const { aggregate } = require('../lib/aggregator');
-const { buildCrGame, parseCrJson } = require('../lib/cloudRedirect');
+const { buildCrGame, crEntriesFromObjects } = require('../lib/cloudRedirect');
 const { fetchCrFiles, testConnection } = require('../lib/s3Client');
 const { toAccountId } = require('../utils');
 
@@ -46,17 +46,14 @@ function cleanupFiles(list) {
   }
 }
 
+// Collects raw { key, text } payloads from uploaded files (Format A/B both handled downstream).
 async function parseFolderFiles(files, limits) {
   const out = [];
   for (const file of files || []) {
     if (file.size > limits.maxFileBytes) continue;
-    const name = path.basename(file.originalname);
-    const appId = parseAppId(name);
-    if (!appId) continue;
     try {
       const text = fs.readFileSync(file.path, 'utf8');
-      const obj = parseCrJson(text);
-      if (obj) out.push({ appId, data: obj });
+      out.push({ key: file.originalname, text });
     } catch (err) {
       /* skip malformed */
     }
@@ -71,11 +68,10 @@ async function parseZipFile(file, limits) {
   if (entries.length > limits.maxFiles) throw new Error('Zip contains too many entries');
   for (const entry of entries) {
     if (entry.isDirectory) continue;
-    const appId = parseAppId(path.basename(entry.entryName));
-    if (!appId) continue;
+    if (!/\.json$/i.test(path.basename(entry.entryName))) continue;
     if (entry.header && entry.header.size > limits.maxFileBytes) continue;
-    const obj = parseCrJson(entry.getData().toString('utf8'));
-    if (obj) out.push({ appId, data: obj });
+    const text = entry.getData().toString('utf8');
+    out.push({ key: entry.entryName, text });
   }
   return out;
 }
@@ -118,18 +114,23 @@ router.post(
           return res.status(400).json({ ok: false, error: "You haven't configured your S3/RustFS connection yet." });
         }
         const result = await fetchCrFiles(userS3, toAccountId(steamid));
-        crRaw = result.files;
+        crRaw = crEntriesFromObjects(result.objects);
         usedPrefix = result.usedPrefix;
       } else if (crSource === 'zip') {
         if (!crZip[0]) return res.status(400).json({ ok: false, error: 'No zip file received' });
-        crRaw = await parseZipFile(crZip[0], limits);
+        crRaw = crEntriesFromObjects(await parseZipFile(crZip[0], limits));
       } else if (crSource === 'folder') {
-        crRaw = await parseFolderFiles(crFiles, limits);
+        crRaw = crEntriesFromObjects(await parseFolderFiles(crFiles, limits));
       }
 
-      // Persist snapshot for nightly auto-updates.
-      clearCr(steamid);
-      for (const f of crRaw) writeCrJson(steamid, f.appId, f.data);
+      // Persist snapshot for nightly auto-updates. If the S3 source yielded zero usable entries,
+      // keep the previous snapshot intact instead of wiping it.
+      if (crSource === 's3' && crRaw.length === 0) {
+        crRaw = readCrSnapshot(steamid);
+      } else {
+        clearCr(steamid);
+        for (const f of crRaw) writeCrJson(steamid, f.appId, f.data);
+      }
 
       const crGames = crRaw.map((f) => buildCrGame(f.appId, f.data));
       const api = includeSteam ? new SteamApi(config.STEAM_API_KEY) : null;

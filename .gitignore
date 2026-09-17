@@ -36,6 +36,12 @@ data/
 # Logs
 *.log
 
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Playwright MCP artifacts (snapshots, screenshots, console logs, fixtures)
+.playwright-mcp/
+
 # Local runtime config / app data
 *.runtimeconfig.dev.json
 

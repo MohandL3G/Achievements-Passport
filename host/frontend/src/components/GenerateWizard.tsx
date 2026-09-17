@@ -155,9 +155,9 @@ export const GenerateWizard: React.FC<GenerateWizardProps> = ({ me, onGenerated 
     },
     {
       key: 'folder',
-      title: 'Drop a Folder',
+      title: 'Upload CloudRedirect File(s)',
       icon: <CloudUpload className="w-5 h-5" />,
-      desc: 'Drag a folder of CloudRedirect JSONs (stats/<accountId>/&lt;appid&gt;.json).',
+      desc: 'Upload one consolidated stats.json for all your games, or individual per-game JSONs (stats/<accountId>/&lt;appid&gt;.json).',
     },
     {
       key: 'zip',
@@ -243,11 +243,11 @@ export const GenerateWizard: React.FC<GenerateWizardProps> = ({ me, onGenerated 
         <div className="p-5 rounded-xl border border-dashed border-neutral-700 bg-neutral-900/40">
           {crSource === 'folder' ? (
             <>
-              <label className="block text-sm font-medium text-neutral-300 mb-2">CloudRedirect folder</label>
+              <label className="block text-sm font-medium text-neutral-300 mb-2">CloudRedirect JSON file(s)</label>
               <input
                 type="file"
                 multiple
-                {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+                accept=".json,application/json"
                 onChange={handleFolder}
                 className="block w-full text-xs text-neutral-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-amber-500 file:text-neutral-950 file:font-semibold hover:file:bg-amber-400"
               />

@@ -138,7 +138,7 @@ export const App: React.FC = () => {
         />
       );
     }
-    return <GamesList games={card.Games} onSelectGame={(g) => setSelectedGame(g)} />;
+    return <GamesList games={card.Games} onSelectGame={(g) => setSelectedGame(g)} onBack={() => setTab('passport')} />;
   };
 
   if (!booted) {

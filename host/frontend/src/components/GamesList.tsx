@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { GameRecord } from '../types';
-import { Search, Clock, Filter } from 'lucide-react';
+import { ArrowLeft, Search, Clock, Filter } from 'lucide-react';
 
 interface GamesListProps {
   games: GameRecord[];
   onSelectGame: (game: GameRecord) => void;
+  onBack: () => void;
 }
 
 function isPirated(source: number): boolean {
@@ -20,7 +21,7 @@ function sourceLabel(source: number): string {
   }
 }
 
-export const GamesList: React.FC<GamesListProps> = ({ games, onSelectGame }) => {
+export const GamesList: React.FC<GamesListProps> = ({ games, onSelectGame, onBack }) => {
   const [search, setSearch] = useState('');
   const [completionFilter, setCompletionFilter] = useState<'all' | 'perfect' | 'inprogress'>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'steam' | 'pirated'>('all');
@@ -62,6 +63,15 @@ export const GamesList: React.FC<GamesListProps> = ({ games, onSelectGame }) => 
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6">
+      {/* Back Link */}
+      <button
+        onClick={onBack}
+        className="inline-flex items-center gap-2 text-sm text-neutral-400 hover:text-amber-300 transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to Passport
+      </button>
+
       {/* Stats Strip */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-neutral-400 px-1">
         <span className="font-semibold text-neutral-300">{games.length} Total Games</span>

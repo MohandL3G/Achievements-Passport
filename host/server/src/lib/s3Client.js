@@ -85,13 +85,7 @@ async function fetchCrFiles(cfg, accountId) {
     // Auto-detect: list "stats/" and find a folder matching the account id.
     try {
       const all = await listAllKeys(client, cfg.bucket, 'stats/');
-      const target = all.filter((k) => k.includes(`/${accountId}/`));
-      if (target.length === 0) {
-        const wanted = all.find((k) => k === `${accountId}/` && false);
-        keys = target;
-      } else {
-        keys = target;
-      }
+      keys = all.filter((k) => k.includes(`/${accountId}/`));
     } catch (err) {
       keys = [];
     }
@@ -102,23 +96,19 @@ async function fetchCrFiles(cfg, accountId) {
     }
   }
 
-  const files = [];
+  const objects = [];
   for (const key of keys) {
     if (!/\.json$/i.test(key)) continue;
-    const name = key.split('/').pop();
-    const m = /^(\d+)\.json$/i.exec(name);
-    if (!m) continue;
     try {
       const text = await getObjectText(client, cfg.bucket, key);
-      const parsed = JSON.parse(text);
-      files.push({ appId: m[1], data: parsed });
+      objects.push({ key, text });
     } catch (err) {
-      // Skip unreadable/invalid object.
+      // Skip unreadable object.
       continue;
     }
   }
 
-  return { files, usedPrefix };
+  return { objects, usedPrefix };
 }
 
 module.exports = { makeClient, testConnection, listAllKeys, getObjectText, fetchCrFiles };

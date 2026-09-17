@@ -14,7 +14,7 @@ const {
 } = require('./storage');
 const { SteamApi, accountIdOfSteamId64 } = require('./steamApi');
 const { aggregate } = require('./aggregator');
-const { buildCrGame } = require('./cloudRedirect');
+const { buildCrGame, crEntriesFromObjects } = require('./cloudRedirect');
 const { fetchCrFiles } = require('./s3Client');
 
 const LOCK_FILE = path.join(config.DATA_DIR, 'scheduler.lock');
@@ -45,16 +45,23 @@ async function runNightlyJob() {
         const userS3 = readUserSecrets(u.steamid64).s3;
         if (userS3 && userS3.bucket) {
           const result = await fetchCrFiles(userS3, accountIdOfSteamId64(u.steamid64));
-          clearCr(u.steamid64);
-          for (const f of result.files) writeCrJson(u.steamid64, f.appId, f.data);
-          crGames = result.files.map((f) => buildCrGame(f.appId, f.data));
-          writeLog(`    s3 pull (user): ${result.files.length} files (prefix ${result.usedPrefix || 'auto'})`);
+          const entries = crEntriesFromObjects(result.objects);
+          // Preserve the previous snapshot when S3 yields nothing usable.
+          if (entries.length > 0) {
+            clearCr(u.steamid64);
+            for (const f of entries) writeCrJson(u.steamid64, f.appId, f.data);
+            crGames = entries.map((f) => buildCrGame(f.appId, f.data));
+          }
+          writeLog(`    s3 pull (user): ${entries.length} entries (prefix ${result.usedPrefix || 'auto'})`);
         } else if (u.steamid64 === config.OWNER_STEAMID && canS3) {
           const result = await fetchCrFiles(secrets.s3, accountIdOfSteamId64(u.steamid64));
-          clearCr(u.steamid64);
-          for (const f of result.files) writeCrJson(u.steamid64, f.appId, f.data);
-          crGames = result.files.map((f) => buildCrGame(f.appId, f.data));
-          writeLog(`    s3 pull (admin): ${result.files.length} files (prefix ${result.usedPrefix || 'auto'})`);
+          const entries = crEntriesFromObjects(result.objects);
+          if (entries.length > 0) {
+            clearCr(u.steamid64);
+            for (const f of entries) writeCrJson(u.steamid64, f.appId, f.data);
+            crGames = entries.map((f) => buildCrGame(f.appId, f.data));
+          }
+          writeLog(`    s3 pull (admin): ${entries.length} entries (prefix ${result.usedPrefix || 'auto'})`);
         }
         const api = u.autoIncludeSteam !== false ? new SteamApi(config.STEAM_API_KEY) : null;
         const card = await aggregate(api, u.steamid64, crGames);

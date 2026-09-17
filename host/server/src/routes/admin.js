@@ -139,7 +139,7 @@ router.post('/s3/pull-check', requireCsrf, async (req, res, next) => {
     }
     const { toAccountId } = require('../utils');
     const result = await fetchCrFiles(secrets.s3, toAccountId(config.OWNER_STEAMID));
-    res.json({ ok: true, files: result.files.length, prefix: result.usedPrefix });
+    res.json({ ok: true, files: result.objects.length, prefix: result.usedPrefix });
   } catch (err) {
     res.status(400).json({ ok: false, error: err && err.message ? err.message : 'Pull failed' });
   }
