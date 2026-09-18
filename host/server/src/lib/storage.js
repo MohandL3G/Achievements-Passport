@@ -175,6 +175,7 @@ function crDir(steamid) {
 }
 
 function listCrFiles(steamid) {
+  recoverSnapshotDir(steamid);
   const dir = crDir(steamid);
   if (!fs.existsSync(dir)) return [];
   try {
@@ -198,6 +199,120 @@ function clearCr(steamid) {
     } catch (err) {
       /* ignore */
     }
+  }
+}
+
+const SWAP_STALE_MS = 60 * 60 * 1000;
+
+function recoverSnapshotDir(steamid) {
+  const dir = crDir(steamid);
+  if (fs.existsSync(dir)) return dir;
+  const base = userDir(steamid);
+  let names;
+  try {
+    names = fs.readdirSync(base);
+  } catch (err) {
+    return dir;
+  }
+  const outs = names.filter((n) => /^last_cr\.out\.[\w-]+$/i.test(n));
+  let best = null;
+  let bestM = -1;
+  for (const n of outs) {
+    const p = path.join(base, n);
+    try {
+      const m = fs.statSync(p).mtimeMs;
+      if (m > bestM) {
+        bestM = m;
+        best = p;
+      }
+    } catch (err) {
+      /* ignore */
+    }
+  }
+  if (!best) return dir;
+  try {
+    fs.renameSync(best, dir);
+  } catch (err) {
+    return dir;
+  }
+  for (const n of outs) {
+    const p = path.join(base, n);
+    if (p === best) continue;
+    try {
+      fs.rmSync(p, { recursive: true, force: true });
+    } catch (err) {
+      /* ignore */
+    }
+  }
+  return dir;
+}
+
+function sweepCrSwapLeftovers(base) {
+  let names;
+  try {
+    names = fs.readdirSync(base);
+  } catch (err) {
+    return;
+  }
+  for (const name of names) {
+    if (!/^last_cr\.(stage|out)\.[\w-]+$/i.test(name)) continue;
+    const p = path.join(base, name);
+    try {
+      const st = fs.statSync(p);
+      if (Date.now() - st.mtimeMs < SWAP_STALE_MS) continue;
+      fs.rmSync(p, { recursive: true, force: true });
+    } catch (err) {
+      /* ignore */
+    }
+  }
+}
+
+// Transactionally replaces a user's CloudRedirect snapshot.
+// The complete new snapshot is written to a sibling staging directory under
+// the same filesystem, then the previous `last_cr` directory is atomically
+// moved aside and the staged directory renamed into place. Readers only ever
+// observe the fully-written staged snapshot (or the intact previous one); a
+// failure between the two renames rolls the previous snapshot back.
+function replaceCrSnapshot(steamid, entries) {
+  recoverSnapshotDir(steamid);
+  ensureUserDirs(steamid);
+  const base = userDir(steamid);
+  const snapshotDir = crDir(steamid);
+  const rand = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const stage = path.join(base, `last_cr.stage.${rand}`);
+  const out = path.join(base, `last_cr.out.${rand}`);
+  sweepCrSwapLeftovers(base);
+
+  fs.mkdirSync(stage, { recursive: true });
+  for (const entry of entries || []) {
+    const appId = String((entry && entry.appId) || '');
+    if (!/^\d+$/.test(appId) || entry.data == null) continue;
+    writeJson(path.join(stage, `${appId}.json`), entry.data);
+  }
+
+  try {
+    fs.renameSync(snapshotDir, out);
+  } catch (err) {
+    fs.rmSync(stage, { recursive: true, force: true });
+    throw err;
+  }
+
+  try {
+    fs.renameSync(stage, snapshotDir);
+  } catch (err) {
+    try {
+      fs.renameSync(out, snapshotDir);
+    } catch (rollbackErr) {
+      /* ignore */
+    }
+    fs.rmSync(stage, { recursive: true, force: true });
+    throw err;
+  }
+
+  try {
+    fs.rmSync(out, { recursive: true, force: true });
+  } catch (err) {
+    /* ignore */
   }
 }
 
@@ -286,6 +401,7 @@ module.exports = {
   listCrFiles,
   writeCrJson,
   clearCr,
+  replaceCrSnapshot,
   readCrSnapshot,
   cacheRead,
   cacheWrite,

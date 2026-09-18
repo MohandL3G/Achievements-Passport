@@ -8,13 +8,13 @@ const {
   readUserSecrets,
   readUsersIndex,
   saveUserCard,
-  clearCr,
-  writeCrJson,
+  readCrSnapshot,
+  replaceCrSnapshot,
   writeLog,
 } = require('./storage');
 const { SteamApi, accountIdOfSteamId64 } = require('./steamApi');
 const { aggregate } = require('./aggregator');
-const { buildCrGame, crEntriesFromObjects } = require('./cloudRedirect');
+const { buildCrGame, crEntriesFromObjects, mergeCrEntries } = require('./cloudRedirect');
 const { fetchCrFiles } = require('./s3Client');
 
 const LOCK_FILE = path.join(config.DATA_DIR, 'scheduler.lock');
@@ -45,23 +45,28 @@ async function runNightlyJob() {
         const userS3 = readUserSecrets(u.steamid64).s3;
         if (userS3 && userS3.bucket) {
           const result = await fetchCrFiles(userS3, accountIdOfSteamId64(u.steamid64));
-          const entries = crEntriesFromObjects(result.objects);
-          // Preserve the previous snapshot when S3 yields nothing usable.
-          if (entries.length > 0) {
-            clearCr(u.steamid64);
-            for (const f of entries) writeCrJson(u.steamid64, f.appId, f.data);
-            crGames = entries.map((f) => buildCrGame(f.appId, f.data));
+          const parsed = crEntriesFromObjects(result.objects);
+          const existing = readCrSnapshot(u.steamid64);
+          if (parsed.length > 0) {
+            const merged = mergeCrEntries(existing, parsed);
+            replaceCrSnapshot(u.steamid64, merged);
+            crGames = merged.map((f) => buildCrGame(f.appId, f.data));
+            writeLog(`    s3 pull (user): ${parsed.length} usable -> snapshot ${crGames.length} entries (prefix ${result.usedPrefix || 'auto'})`);
+          } else {
+            writeLog(`    s3 pull (user): 0 usable, keeping previous snapshot (${existing.length} entries)`);
           }
-          writeLog(`    s3 pull (user): ${entries.length} entries (prefix ${result.usedPrefix || 'auto'})`);
         } else if (u.steamid64 === config.OWNER_STEAMID && canS3) {
           const result = await fetchCrFiles(secrets.s3, accountIdOfSteamId64(u.steamid64));
-          const entries = crEntriesFromObjects(result.objects);
-          if (entries.length > 0) {
-            clearCr(u.steamid64);
-            for (const f of entries) writeCrJson(u.steamid64, f.appId, f.data);
-            crGames = entries.map((f) => buildCrGame(f.appId, f.data));
+          const parsed = crEntriesFromObjects(result.objects);
+          const existing = readCrSnapshot(u.steamid64);
+          if (parsed.length > 0) {
+            const merged = mergeCrEntries(existing, parsed);
+            replaceCrSnapshot(u.steamid64, merged);
+            crGames = merged.map((f) => buildCrGame(f.appId, f.data));
+            writeLog(`    s3 pull (admin): ${parsed.length} usable -> snapshot ${crGames.length} entries (prefix ${result.usedPrefix || 'auto'})`);
+          } else {
+            writeLog(`    s3 pull (admin): 0 usable, keeping previous snapshot (${existing.length} entries)`);
           }
-          writeLog(`    s3 pull (admin): ${entries.length} entries (prefix ${result.usedPrefix || 'auto'})`);
         }
         const api = u.autoIncludeSteam !== false ? new SteamApi(config.STEAM_API_KEY) : null;
         const card = await aggregate(api, u.steamid64, crGames);

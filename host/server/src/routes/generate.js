@@ -9,15 +9,14 @@ const {
   readSettings,
   readUsersIndex,
   saveUserCard,
-  clearCr,
-  writeCrJson,
   readCrSnapshot,
+  replaceCrSnapshot,
   readUserSecrets,
   saveUserSecrets,
 } = require('../lib/storage');
 const { SteamApi } = require('../lib/steamApi');
 const { aggregate } = require('../lib/aggregator');
-const { buildCrGame, crEntriesFromObjects } = require('../lib/cloudRedirect');
+const { buildCrGame, crEntriesFromObjects, mergeCrEntries } = require('../lib/cloudRedirect');
 const { fetchCrFiles, testConnection } = require('../lib/s3Client');
 const { toAccountId } = require('../utils');
 
@@ -123,13 +122,20 @@ router.post(
         crRaw = crEntriesFromObjects(await parseFolderFiles(crFiles, limits));
       }
 
-      // Persist snapshot for nightly auto-updates. If the S3 source yielded zero usable entries,
-      // keep the previous snapshot intact instead of wiping it.
-      if (crSource === 's3' && crRaw.length === 0) {
-        crRaw = readCrSnapshot(steamid);
+      // Persist snapshot for nightly auto-updates.
+      // S3: merge newly parsed entries into the previous snapshot so a partial
+      // or empty pull cannot destroy a known-good mirror. A pull yielding zero
+      // usable entries keeps the previous snapshot entirely.
+      // Folder/zip/none: an explicit, complete upload replaces the snapshot.
+      if (crSource === 's3') {
+        if (crRaw.length === 0) {
+          crRaw = readCrSnapshot(steamid);
+        } else {
+          crRaw = mergeCrEntries(readCrSnapshot(steamid), crRaw);
+        }
+        replaceCrSnapshot(steamid, crRaw);
       } else {
-        clearCr(steamid);
-        for (const f of crRaw) writeCrJson(steamid, f.appId, f.data);
+        replaceCrSnapshot(steamid, crRaw);
       }
 
       const crGames = crRaw.map((f) => buildCrGame(f.appId, f.data));

@@ -178,4 +178,29 @@ function crEntriesFromObjects(objects) {
   return out;
 }
 
-module.exports = { buildCrGame, buildCrAchievements, parseCrJson, parseCrBundle, isCrGameData, crAppIdFromKey, crEntriesFromObjects, pluckUnlockTimestamps, isUnlocked };
+// Reconciles a freshly parsed S3 pull against the existing persistent snapshot.
+// Entries present in the new pull win (fresher data); entries missing from a
+// partial/transient pull are preserved rather than dropped, and brand-new
+// entries are appended. AppIDs are deduplicated (first occurrence wins the slot,
+// matching crEntriesFromObjects semantics).
+function mergeCrEntries(oldEntries, newEntries) {
+  const byAppId = new Map((newEntries || []).map((e) => [String(e.appId), e]));
+  const out = [];
+  const seen = new Set();
+  for (const e of oldEntries || []) {
+    const id = String(e.appId);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(byAppId.has(id) ? byAppId.get(id) : e);
+  }
+  for (const e of newEntries || []) {
+    const id = String(e.appId);
+    if (!seen.has(id)) {
+      seen.add(id);
+      out.push(e);
+    }
+  }
+  return out;
+}
+
+module.exports = { buildCrGame, buildCrAchievements, parseCrJson, parseCrBundle, isCrGameData, crAppIdFromKey, crEntriesFromObjects, mergeCrEntries, pluckUnlockTimestamps, isUnlocked };
