@@ -6,6 +6,7 @@ const multer = require('multer');
 const config = require('./config');
 const { ensureDirs } = require('./lib/storage');
 const { realmBase } = require('./lib/openid');
+const { FileSessionStore } = require('./lib/sessionStore');
 
 function securityHeaders(req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -49,6 +50,7 @@ function createApp() {
   app.use(
     session({
       name: 'ap.sid',
+      store: new FileSessionStore(),
       secret: config.COOKIE_SECRET,
       resave: false,
       saveUninitialized: false,
