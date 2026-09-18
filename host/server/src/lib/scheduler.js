@@ -21,6 +21,22 @@ const LOCK_FILE = path.join(config.DATA_DIR, 'scheduler.lock');
 let currentTask = null;
 let running = false;
 
+function normalizeCronExpression(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  const normalized = trimmed.replace(/\s+/g, ' ');
+  if (normalized.length > 200) return null;
+  const fields = normalized.split(' ');
+  if (fields.length !== 5) return null;
+  try {
+    if (!cron.validate(normalized)) return null;
+  } catch {
+    return null;
+  }
+  return normalized;
+}
+
 async function runNightlyJob() {
   if (running) return;
   if (fs.existsSync(LOCK_FILE)) {
@@ -99,8 +115,18 @@ function startScheduler() {
     writeLog('scheduler disabled');
     return;
   }
-  currentTask = cron.schedule(settings.scheduler.cron, runNightlyJob);
-  writeLog(`scheduler started (cron: ${settings.scheduler.cron}, timezone: server local)`);
+  const expression = normalizeCronExpression(settings.scheduler.cron);
+  if (expression === null) {
+    writeLog(`scheduler not started: invalid cron "${settings.scheduler.cron}" in settings (expected exactly 5 fields accepted by node-cron)`);
+    return;
+  }
+  try {
+    currentTask = cron.schedule(expression, runNightlyJob);
+    writeLog(`scheduler started (cron: ${expression}, timezone: server local)`);
+  } catch (err) {
+    writeLog(`scheduler not started: cron "${expression}" failed to schedule: ${err.message}`);
+    currentTask = null;
+  }
 }
 
-module.exports = { startScheduler, runNightlyJob };
+module.exports = { startScheduler, runNightlyJob, normalizeCronExpression };

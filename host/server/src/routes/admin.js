@@ -18,7 +18,7 @@ const { SteamApi } = require('../lib/steamApi');
 const { aggregate } = require('../lib/aggregator');
 const { saveUserCard } = require('../lib/storage');
 const { writeLog } = require('../lib/storage');
-const { startScheduler } = require('../lib/scheduler');
+const { startScheduler, normalizeCronExpression } = require('../lib/scheduler');
 
 const router = express.Router();
 router.use(requireAdmin);
@@ -79,10 +79,26 @@ router.post('/gate', requireCsrf, (req, res) => {
 
 router.post('/scheduler', requireCsrf, (req, res) => {
   const s = readSettings();
-  s.scheduler.enabled = !!req.body.enabled;
-  if (typeof req.body.cron === 'string' && /^[\d\s*\/,\-]+$/.test(req.body.cron.trim())) {
-    s.scheduler.cron = req.body.cron.trim();
+  const nextEnabled = !!req.body.enabled;
+  const hasCron = typeof req.body.cron === 'string';
+  let nextCron = s.scheduler.cron;
+  if (hasCron) {
+    const normalized = normalizeCronExpression(req.body.cron);
+    if (normalized === null) {
+      return res.status(400).json({
+        ok: false,
+        error: `Invalid cron expression "${req.body.cron}". Expected exactly 5 whitespace-separated fields accepted by node-cron (e.g. "0 0 * * *").`,
+      });
+    }
+    nextCron = normalized;
+  } else if (nextEnabled && normalizeCronExpression(nextCron) === null) {
+    return res.status(400).json({
+      ok: false,
+      error: `Saved cron "${nextCron}" is invalid. Enabling the scheduler requires a valid 5-field cron expression.`,
+    });
   }
+  s.scheduler.enabled = nextEnabled;
+  s.scheduler.cron = nextCron;
   saveSettings(s);
   writeLog(`scheduler updated: enabled=${s.scheduler.enabled}, cron=${s.scheduler.cron}`);
   startScheduler();
