@@ -41,15 +41,27 @@ router.get('/steam/callback', async (req, res) => {
       avatarUrl: persona ? persona.avatarFullUrl : '',
       createdAt: new Date().toISOString(),
     });
-    req.session.steamid = steamid;
-    req.session.persona = persona
-      ? { name: persona.personaName, avatar: persona.avatarFullUrl }
-      : { name: steamid, avatar: '' };
-    ensureCsrf(req);
 
-    const target = typeof req.session.postLogin === 'string' ? req.session.postLogin : '/';
-    delete req.session.postLogin;
-    res.redirect(`${realm}${target}`);
+    // postLogin is vestigial, but preserve it defensively across regeneration.
+    const postLogin = typeof req.session.postLogin === 'string' ? req.session.postLogin : null;
+
+    // Session fixation protection: regenerate AFTER OpenID verification succeeds.
+    // The pre-authentication session (attacker-controllable ID) is destroyed and
+    // replaced with a fresh session ID; steam identity + fresh csrf are written
+    // only into the new session.
+    req.session.regenerate((regErr) => {
+      if (regErr) {
+        return res.status(500).send('Steam sign-in error.');
+      }
+      req.session.steamid = steamid;
+      req.session.persona = persona
+        ? { name: persona.personaName, avatar: persona.avatarFullUrl }
+        : { name: steamid, avatar: '' };
+      ensureCsrf(req);
+
+      const target = postLogin || '/';
+      res.redirect(`${realm}${target}`);
+    });
   } catch (err) {
     res.status(500).send('Steam sign-in error.');
   }
@@ -77,9 +89,23 @@ router.post('/admin/login', (req, res) => {
     safeEqual(username, config.ADMIN_USERNAME) &&
     safeEqual(password, config.ADMIN_PASSWORD)
   ) {
-    ensureCsrf(req);
-    req.session.isAdmin = true;
-    return res.json({ ok: true });
+    // Session fixation protection: regenerate only after credentials validate.
+    // An already-authenticated Steam user may log into the admin panel; preserve
+    // their existing Steam identity while issuing a fresh session ID.
+    const existingSteamid = req.session.steamid || null;
+    const existingPersona = req.session.persona || null;
+
+    req.session.regenerate((regErr) => {
+      if (regErr) {
+        return res.status(500).json({ ok: false, error: 'Session error' });
+      }
+      if (existingSteamid) req.session.steamid = existingSteamid;
+      if (existingPersona) req.session.persona = existingPersona;
+      ensureCsrf(req);
+      req.session.isAdmin = true;
+      return res.json({ ok: true });
+    });
+    return;
   }
   res.status(401).json({ ok: false, error: 'Invalid credentials' });
 });
