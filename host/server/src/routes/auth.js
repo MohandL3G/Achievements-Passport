@@ -5,6 +5,7 @@ const { safeEqual } = require('../utils');
 const { SteamApi } = require('../lib/steamApi');
 const { realmBase, buildAuthUrl, verifyAssertion } = require('../lib/openid');
 const { upsertUser } = require('../lib/storage');
+const { requireCsrf } = require('./guards');
 
 const router = express.Router();
 const api = new SteamApi(config.STEAM_API_KEY);
@@ -77,8 +78,14 @@ router.get('/me', (req, res) => {
   });
 });
 
+router.post('/logout', requireCsrf, (req, res) => {
+  req.session.destroy(() => res.json({ ok: true }));
+});
+
+// Logout must never happen over GET (state change from a link/embed/image).
+// Explicitly reject it instead of silently falling through to the SPA fallback.
 router.get('/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/'));
+  res.status(405).json({ ok: false, error: 'Sign out requires POST' });
 });
 
 router.post('/admin/login', (req, res) => {

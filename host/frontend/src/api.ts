@@ -41,8 +41,14 @@ export function startSteamLogin() {
 }
 
 export async function logout(): Promise<void> {
+  const res = await fetch('/api/auth/logout', {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'same-origin',
+  });
+  await parse<{ ok: boolean }>(res);
   setCsrf(null);
-  window.location.href = '/api/auth/logout';
+  window.location.href = '/';
 }
 
 export async function adminLogin(username: string, password: string): Promise<void> {
