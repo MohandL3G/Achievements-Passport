@@ -3,10 +3,31 @@ const express = require('express');
 const session = require('express-session');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
-const cors = require('cors');
 const config = require('./config');
 const { ensureDirs } = require('./lib/storage');
 const { realmBase } = require('./lib/openid');
+
+function securityHeaders(req, res, next) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https://*.steamstatic.com",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; '));
+  if (req.secure) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  }
+  next();
+}
 
 function sameOrigin(req, res, next) {
   const origin = req.headers.origin;
@@ -20,11 +41,10 @@ function createApp() {
   ensureDirs();
   const app = express();
   app.set('trust proxy', 1);
+  app.disable('x-powered-by');
 
+  app.use(securityHeaders);
   app.use(express.json({ limit: '2mb' }));
-  app.use(
-    cors()
-  );
 
   app.use(
     session({
