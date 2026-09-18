@@ -10,7 +10,7 @@ function statCell(x, label, value) {
 
 function renderBadge(card, steamid) {
   const s = card ? card.Summary : null;
-  const persona = card && card.Player ? card.Player.PersonaName : `Steam ${steamid}`;
+  const persona = card && card.Player ? card.Player.personaName : `Steam ${steamid}`;
 
   let body;
   if (!s) {

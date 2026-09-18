@@ -63,7 +63,7 @@ function createApp() {
   app.use('/api/generate', sameOrigin, require('./routes/generate'));
   app.use('/api/admin', sameOrigin, require('./routes/admin'));
   app.use('/api', require('./routes/users'));
-  app.get('/badge.svg', require('./routes/badge'));
+  app.use('/badge.svg', require('./routes/badge'));
 
   app.get('/api/health', (req, res) => res.json({ ok: true, uptime: process.uptime() }));
 
