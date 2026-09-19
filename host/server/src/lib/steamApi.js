@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
-const { cacheRead, cacheWrite } = require('./storage');
+const { cacheRead, cacheWrite, writeLog } = require('./storage');
 const { toAccountId } = require('../utils');
 
 const TTL = {
@@ -183,13 +183,17 @@ class SteamApi {
       const json = await this.call('ISteamApps', 'GetAppList', 'v0002', {});
       const apps = (json && json.applist && json.applist.apps) || [];
       if (!apps.length) {
+        writeLog('applist fetch returned no apps; game names may fall back to placeholders');
         this.appList = new Map();
         return this.appList;
       }
       const arr = apps.map((a) => [String(a.appid), a.name]);
       cacheWrite('applist', arr);
       this.appList = new Map(arr);
+      writeLog(`applist loaded: ${arr.length} apps cached (7-day ttl)`);
     } catch (err) {
+      const msg = (err && err.message ? String(err.message) : String(err)).slice(0, 160);
+      writeLog(`applist fetch failed; game names may fall back to placeholders: ${msg}`);
       this.appList = new Map();
     }
     return this.appList;

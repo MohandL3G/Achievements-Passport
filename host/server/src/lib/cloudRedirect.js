@@ -65,18 +65,47 @@ function buildCrAchievements(achievementsObj) {
   return out;
 }
 
-function buildCrGame(appId, json) {
+// Returns a usable real game name, or null for empty/`App <appid>` placeholders.
+function isRealName(value) {
+  if (typeof value !== 'string') return null;
+  const name = value.trim();
+  if (name === '' || /^App \d+$/.test(name)) return null;
+  return name;
+}
+
+// Name resolution precedence for a CR game:
+//   1) a real name carried by the game data (`json.name`), e.g. from an earlier
+//      successful resolution persisted into the snapshot;
+//   2) a real name from the supplied Steam AppList map (persisted into `json.name`
+//      so the next snapshot write keeps it);
+//   3) the `App <appid>` placeholder when no real name is available.
+// A real name is never overwritten by the placeholder.
+function resolveCrName(appId, json, appList) {
+  const carried = isRealName(json && json.name);
+  if (carried) return carried;
+  if (appList && typeof appList.get === 'function') {
+    const resolved = isRealName(appList.get(String(appId)));
+    if (resolved && json && typeof json === 'object') {
+      json.name = resolved;
+      return resolved;
+    }
+  }
+  return `App ${appId}`;
+}
+
+function buildCrGame(appId, json, appList) {
   const achievements = buildCrAchievements(json && json.achievements);
   const unlocked = achievements.filter((a) => a.achieved).length;
 
-  const playtime = json && json.playtime && typeof json.playtime === 'object' ? json.playtime : {};
-  const playtimeForever = Number(playtime.minutes_forever ?? json.playtime_forever ?? 0);
-  const playtime2weeks = Number(playtime.minutes_2weeks ?? json.minutes_2weeks ?? 0);
-  const lastPlayed = Number(playtime.last_played ?? json.last_played ?? 0);
+  const j = json && typeof json === 'object' ? json : {};
+  const playtime = j.playtime && typeof j.playtime === 'object' ? j.playtime : {};
+  const playtimeForever = Number(playtime.minutes_forever ?? j.playtime_forever ?? 0);
+  const playtime2weeks = Number(playtime.minutes_2weeks ?? j.minutes_2weeks ?? 0);
+  const lastPlayed = Number(playtime.last_played ?? j.last_played ?? 0);
 
   return {
     AppId: Number(appId),
-    Name: `App ${appId}`,
+    Name: resolveCrName(appId, json, appList),
     HeaderImageUrl: '',
     IconUrl: '',
     Source: 2,
@@ -116,19 +145,20 @@ function isCrGameData(value) {
 //   Format A: one game per file, filename = "<appid>.json", value = {achievements, stats, playtime, crc_stats}.
 //   Format B: one consolidated file (e.g. stats.json) where every top-level key is a numeric AppID
 //             string and each value is that game's {achievements, stats, playtime, crc_stats} object.
-// Parses a file's text: if it looks like Format B, returns [{ appId, data }, ...] for every entry,
-// regardless of the outer filename. Returns null otherwise (caller falls back to filename-based logic).
+// Parses a file's text: if it looks like Format B (at least one numeric-AppID key holding game data),
+// returns [{ appId, data }, ...] for every such entry. Keys that are not numeric AppIDs, or whose
+// value has none of the recognized game-data keys, are skipped rather than discarding the whole
+// bundle. Returns null when no valid bundle entry exists (caller falls back to filename-based logic).
 function parseCrBundle(text) {
   const obj = parseCrJson(text);
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-  const keys = Object.keys(obj);
-  if (keys.length === 0) return null;
   const entries = [];
-  for (const key of keys) {
-    if (!/^\d+$/.test(key)) return null;
-    if (!isCrGameData(obj[key])) return null;
+  for (const key of Object.keys(obj)) {
+    if (!/^\d+$/.test(key)) continue;
+    if (!isCrGameData(obj[key])) continue;
     entries.push({ appId: key, data: obj[key] });
   }
+  if (entries.length === 0) return null;
   return entries;
 }
 
@@ -191,7 +221,19 @@ function mergeCrEntries(oldEntries, newEntries) {
     const id = String(e.appId);
     if (seen.has(id)) continue;
     seen.add(id);
-    out.push(byAppId.has(id) ? byAppId.get(id) : e);
+    const replacement = byAppId.get(id);
+    if (replacement) {
+      // A fresh pull carries no resolved name; keep a previously known real name
+      // so CR games do not regress to "App <appid>" when the AppList is unavailable.
+      const oldName = isRealName(e && e.data && e.data.name);
+      const newData = replacement && replacement.data;
+      if (oldName && newData && typeof newData === 'object' && !isRealName(newData.name)) {
+        newData.name = oldName;
+      }
+      out.push(replacement);
+    } else {
+      out.push(e);
+    }
   }
   for (const e of newEntries || []) {
     const id = String(e.appId);
@@ -203,4 +245,29 @@ function mergeCrEntries(oldEntries, newEntries) {
   return out;
 }
 
-module.exports = { buildCrGame, buildCrAchievements, parseCrJson, parseCrBundle, isCrGameData, crAppIdFromKey, crEntriesFromObjects, mergeCrEntries, pluckUnlockTimestamps, isUnlocked };
+// Copies real names resolved at card-build time (from the merged `games` records)
+// back into the raw `{ appId, data }` snapshot entries, so the next snapshot write
+// persists them. Only real names are written; placeholders never touch `data.name`.
+// Returns the number of entries enriched (0 when nothing changed).
+function applyResolvedNames(entries, games) {
+  if (!Array.isArray(entries) || !Array.isArray(games)) return 0;
+  const resolvedByName = new Map();
+  for (const g of games) {
+    if (!g || g.Source !== 2) continue;
+    const name = isRealName(g.Name);
+    if (name) resolvedByName.set(String(g.AppId), name);
+  }
+  let added = 0;
+  for (const entry of entries || []) {
+    if (!entry || !entry.data || typeof entry.data !== 'object') continue;
+    if (isRealName(entry.data.name)) continue;
+    const name = resolvedByName.get(String(entry.appId));
+    if (name) {
+      entry.data.name = name;
+      added++;
+    }
+  }
+  return added;
+}
+
+module.exports = { buildCrGame, buildCrAchievements, parseCrJson, parseCrBundle, isCrGameData, crAppIdFromKey, crEntriesFromObjects, mergeCrEntries, applyResolvedNames, pluckUnlockTimestamps, isUnlocked };

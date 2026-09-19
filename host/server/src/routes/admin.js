@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const config = require('../config');
 const { isValidSteamId64 } = require('../utils');
 const {
@@ -18,7 +19,7 @@ const { SteamApi } = require('../lib/steamApi');
 const { aggregate } = require('../lib/aggregator');
 const { saveUserCard } = require('../lib/storage');
 const { writeLog } = require('../lib/storage');
-const { startScheduler, normalizeCronExpression } = require('../lib/scheduler');
+const { startScheduler, normalizeCronExpression, acquireSchedulerLock, releaseSchedulerLock, analyzeLockFile } = require('../lib/scheduler');
 
 const router = express.Router();
 router.use(requireAdmin);
@@ -185,6 +186,17 @@ router.delete('/users/:steamid', requireCsrf, (req, res) => {
 router.post('/users/:steamid/regenerate', requireCsrf, async (req, res, next) => {
   const { steamid } = req.params;
   if (!isValidSteamId64(steamid)) return res.status(400).json({ ok: false, error: 'Invalid Steam ID' });
+  // Reuse the F4 scheduler lock file so manual regeneration cannot run
+  // concurrently with the nightly job or with another Run Now (which would
+  // duplicate Steam API calls and collide on the same card.json.tmp path).
+  const lockFile = path.join(config.DATA_DIR, 'scheduler.lock');
+  const acquired = acquireSchedulerLock(lockFile);
+  if (!acquired) {
+    if (analyzeLockFile(lockFile).state === 'held') {
+      return res.status(409).json({ ok: false, error: 'nightly regeneration in progress' });
+    }
+    return res.status(503).json({ ok: false, error: 'Scheduler lock unavailable' });
+  }
   try {
     const api = new SteamApi(config.STEAM_API_KEY);
     const card = await aggregate(api, steamid);
@@ -193,6 +205,8 @@ router.post('/users/:steamid/regenerate', requireCsrf, async (req, res, next) =>
     res.json({ ok: true, games: card.Summary.TotalGames, perfect: card.Summary.PerfectGames });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
+  } finally {
+    releaseSchedulerLock(lockFile, acquired);
   }
 });
 

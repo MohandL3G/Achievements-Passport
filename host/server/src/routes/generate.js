@@ -16,7 +16,7 @@ const {
 } = require('../lib/storage');
 const { SteamApi } = require('../lib/steamApi');
 const { aggregate } = require('../lib/aggregator');
-const { buildCrGame, crEntriesFromObjects, mergeCrEntries } = require('../lib/cloudRedirect');
+const { buildCrGame, crEntriesFromObjects, mergeCrEntries, applyResolvedNames } = require('../lib/cloudRedirect');
 const { fetchCrFiles, testConnection } = require('../lib/s3Client');
 const { toAccountId } = require('../utils');
 
@@ -141,6 +141,12 @@ router.post(
       const crGames = crRaw.map((f) => buildCrGame(f.appId, f.data));
       const api = includeSteam ? new SteamApi(config.STEAM_API_KEY) : null;
       const card = await aggregate(api, steamid, crGames);
+      // Persist names the AppList resolved for CR-only games back into the
+      // snapshot (only when something actually changed) so later generations
+      // that lack the AppList can still reuse the known real names.
+      if (crSource !== 'none' && applyResolvedNames(crRaw, card.Games) > 0) {
+        replaceCrSnapshot(steamid, crRaw);
+      }
       saveUserCard(steamid, card, includeSteam);
 
       const users = readUsersIndex().map((u) => u.steamid64);

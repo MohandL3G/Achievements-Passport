@@ -114,14 +114,14 @@ async function aggregate(api, steamid, crGamesOverride) {
   }
 
   let crGames = crGamesOverride;
+  const appList = api && api.appList ? api.appList : loadCachedAppList();
   if (!crGames) {
     crGames = readCrSnapshot(steamid).map(({ appId, data }) => {
       const { buildCrGame } = require('./cloudRedirect');
-      return buildCrGame(appId, data);
+      return buildCrGame(appId, data, appList);
     });
   }
 
-  const appList = api && api.appList ? api.appList : loadCachedAppList();
   const games = mergeAndFinalize(steamGames, crGames, appList);
   const summary = buildSummary(games);
   const highlights = buildHighlights(games);

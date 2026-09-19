@@ -10,6 +10,9 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const SECRETS_FILE = path.join(DATA_DIR, 'secrets.enc.json');
 const CACHE_DIR = path.join(DATA_DIR, 'cache');
 const TMP_DIR = path.join(DATA_DIR, 'tmp');
+const CARD_BACKUP_KEEP = 30;
+
+const CARD_BACKUP_RE = /^card_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/;
 
 function ensureDirs() {
   for (const d of [DATA_DIR, USERS_DIR, CACHE_DIR, TMP_DIR]) {
@@ -149,6 +152,7 @@ function saveUserCard(steamid, card, autoIncludeSteam) {
       /* ignore */
     }
   }
+  trimCardBackups(steamid);
   writeJson(cardFile, card);
   const users = readUsersIndex();
   const u = findUser(users, steamid);
@@ -166,6 +170,34 @@ function deleteUser(steamid) {
   removeUserFromIndex(steamid);
   const dir = userDir(steamid);
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// Keeps card backups bounded: only files matching the exact card-backup name
+// pattern produced by saveUserCard are candidates, and only the oldest beyond
+// `keep` are removed. The live card.json, last_cr snapshot, staging/recovery
+// dirs, and any unrelated or malformed-named files are never touched.
+function trimCardBackups(steamid, keep = CARD_BACKUP_KEEP) {
+  const dir = path.join(userDir(steamid), 'backups');
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (err) {
+    return 0;
+  }
+  const matches = names.filter((n) => CARD_BACKUP_RE.test(n)).sort();
+  if (matches.length <= keep) return 0;
+  const excess = matches.length - keep;
+  let removed = 0;
+  for (const name of matches.slice(0, excess)) {
+    try {
+      fs.unlinkSync(path.join(dir, name));
+      removed++;
+    } catch (err) {
+      /* ignore individual deletion failures */
+    }
+  }
+  if (removed > 0) writeLog(`card backups trimmed: ${removed} old backup(s) removed, ${keep} kept`);
+  return removed;
 }
 
 // ---------- CloudRedirect snapshot ----------
@@ -397,6 +429,7 @@ module.exports = {
   getUserCard,
   cardExists,
   saveUserCard,
+  trimCardBackups,
   deleteUser,
   listCrFiles,
   writeCrJson,
