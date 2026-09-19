@@ -98,8 +98,6 @@ npm run build      # outputs host/frontend/dist (served by Express)
 
 Dev frontend: `npm run dev` (proxies `/api` to `:3281`).
 
-Recommended deployment: PVE LXC behind Nginx Proxy Manager (`192.168.0.104`) + Cloudflare, public as `passport.mohandl3g.ly`. Public profiles are required to read Steam data; private profiles degrade to CloudRedirect-only cards with a notice.
-
 ---
 
 ## Security Notes
